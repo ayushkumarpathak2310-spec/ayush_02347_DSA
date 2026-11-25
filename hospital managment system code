@@ -1,0 +1,590 @@
+import java.util.*;
+import java.io.*;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+
+public class HospitalManagementSystem {
+
+    // ================= PATIENT CLASS =================
+    static class Patient {
+        String id;
+        String name;
+        int severity;
+        String appointment;
+        long arrivalOrder;
+        String status;
+
+        Patient(String id, String name, int severity,
+                String appointment, long arrivalOrder, String status) {
+            this.id = id;
+            this.name = name;
+            this.severity = severity;
+            this.appointment = appointment;
+            this.arrivalOrder = arrivalOrder;
+            this.status = status;
+        }
+
+        @Override
+        public String toString() {
+            return String.format(
+                "ID: %-8s | Name: %-20s | Severity: %d | Appointment: %-16s | Status: %s",
+                id, name, severity, appointment, status
+            );
+        }
+    }
+
+    // ================= DATA STRUCTURES =================
+
+    // LinkedList stores all patient records
+    static LinkedList<Patient> patients = new LinkedList<>();
+
+    // HashMap provides fast patient ID lookup
+    static HashMap<String, Patient> patientMap = new HashMap<>();
+
+    // PriorityQueue: Higher severity first, then earlier arrival
+    static PriorityQueue<Patient> waitingQueue =
+        new PriorityQueue<>(
+            (p1, p2) -> {
+                if (p1.severity != p2.severity) {
+                    return Integer.compare(p2.severity, p1.severity);
+                }
+                return Long.compare(p1.arrivalOrder, p2.arrivalOrder);
+            }
+        );
+
+    static long arrivalCounter = 0;
+
+    static final String FILE_NAME = "hospital.txt";
+
+    static final DateTimeFormatter APPOINTMENT_FORMAT =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+    static Scanner sc = new Scanner(System.in);
+
+    // ================= MAIN METHOD =================
+
+    public static void main(String[] args) {
+
+        loadPatients();
+
+        System.out.println("========================================");
+        System.out.println("     HOSPITAL MANAGEMENT SYSTEM");
+        System.out.println("========================================");
+
+        while (true) {
+            displayMenu();
+
+            int choice = readInt("Enter your choice: ");
+
+            switch (choice) {
+
+                case 1:
+                    registerPatient();
+                    break;
+
+                case 2:
+                    searchPatient();
+                    break;
+
+                case 3:
+                    updatePatient();
+                    break;
+
+                case 4:
+                    callNextPatient();
+                    break;
+
+                case 5:
+                    displayAllPatients();
+                    break;
+
+                case 6:
+                    sortBySeverity();
+                    break;
+
+                case 7:
+                    sortByAppointment();
+                    break;
+
+                case 8:
+                    deletePatient();
+                    break;
+
+                case 9:
+                    displayWaitingQueue();
+                    break;
+
+                case 10:
+                    savePatients();
+                    System.out.println("\nData saved successfully.");
+                    System.out.println("Exiting Hospital Management System.");
+                    sc.close();
+                    return;
+
+                default:
+                    System.out.println("Invalid choice! Please enter 1-10.");
+            }
+        }
+    }
+
+    // ================= MENU =================
+
+    static void displayMenu() {
+        System.out.println("\n------------- MAIN MENU -------------");
+        System.out.println("1. Register Patient");
+        System.out.println("2. Search Patient");
+        System.out.println("3. Update Patient");
+        System.out.println("4. Call Next Patient");
+        System.out.println("5. Display All Patients");
+        System.out.println("6. Sort Patients by Severity");
+        System.out.println("7. Sort Patients by Appointment");
+        System.out.println("8. Delete Patient");
+        System.out.println("9. Display Waiting Queue");
+        System.out.println("10. Save & Exit");
+        System.out.println("------------------------------------");
+    }
+
+    // ================= REGISTER PATIENT =================
+
+    static void registerPatient() {
+
+        System.out.println("\n--- Patient Registration ---");
+
+        String id;
+
+        while (true) {
+            id = readString("Enter Patient ID: ").toUpperCase();
+
+            if (patientMap.containsKey(id)) {
+                System.out.println("Patient ID already exists! Try another.");
+            } else {
+                break;
+            }
+        }
+
+        String name = readString("Enter Patient Name: ");
+
+        int severity;
+
+        while (true) {
+            severity = readInt("Enter Severity (1-5): ");
+
+            if (severity >= 1 && severity <= 5) {
+                break;
+            }
+
+            System.out.println("Severity must be between 1 and 5.");
+        }
+
+        String appointment = readAppointment();
+
+        Patient patient = new Patient(
+            id,
+            name,
+            severity,
+            appointment,
+            arrivalCounter++,
+            "WAITING"
+        );
+
+        patients.add(patient);
+        patientMap.put(id, patient);
+        waitingQueue.add(patient);
+
+        System.out.println("\nPatient registered successfully!");
+        System.out.println(patient);
+
+        savePatients();
+    }
+
+    // ================= SEARCH PATIENT =================
+
+    static void searchPatient() {
+
+        System.out.println("\n--- Search Patient ---");
+
+        String id = readString("Enter Patient ID: ").toUpperCase();
+
+        Patient patient = patientMap.get(id);
+
+        if (patient == null) {
+            System.out.println("Patient " + id + " not found.");
+        } else {
+            System.out.println("\nPatient Found:");
+            System.out.println(patient);
+        }
+    }
+
+    // ================= UPDATE PATIENT =================
+
+    static void updatePatient() {
+
+        System.out.println("\n--- Update Patient ---");
+
+        String id = readString("Enter Patient ID: ").toUpperCase();
+
+        Patient patient = patientMap.get(id);
+
+        if (patient == null) {
+            System.out.println("Patient not found.");
+            return;
+        }
+
+        System.out.println("\nCurrent Details:");
+        System.out.println(patient);
+
+        System.out.println("\nWhat do you want to update?");
+        System.out.println("1. Name");
+        System.out.println("2. Severity");
+        System.out.println("3. Appointment");
+        System.out.println("4. All Details");
+
+        int choice = readInt("Enter choice: ");
+
+        switch (choice) {
+
+            case 1:
+                patient.name = readString("Enter new name: ");
+                break;
+
+            case 2:
+                patient.severity = readSeverity();
+                break;
+
+            case 3:
+                patient.appointment = readAppointment();
+                break;
+
+            case 4:
+                patient.name = readString("Enter new name: ");
+                patient.severity = readSeverity();
+                patient.appointment = readAppointment();
+                break;
+
+            default:
+                System.out.println("Invalid choice.");
+                return;
+        }
+
+        // Rebuild queue so changed severity takes effect
+        rebuildWaitingQueue();
+
+        System.out.println("\nPatient updated successfully!");
+        System.out.println(patient);
+
+        savePatients();
+    }
+
+    // ================= CALL NEXT PATIENT =================
+
+    static void callNextPatient() {
+
+        System.out.println("\n--- Call Next Patient ---");
+
+        if (waitingQueue.isEmpty()) {
+            System.out.println("No patients in waiting queue.");
+            return;
+        }
+
+        Patient patient = waitingQueue.poll();
+
+        patient.status = "CALLED";
+
+        System.out.println("\nNext Patient Called:");
+        System.out.println("--------------------------------");
+        System.out.println("Patient ID   : " + patient.id);
+        System.out.println("Patient Name : " + patient.name);
+        System.out.println("Severity     : " + patient.severity);
+        System.out.println("Appointment  : " + patient.appointment);
+        System.out.println("--------------------------------");
+
+        savePatients();
+    }
+
+    // ================= DISPLAY ALL PATIENTS =================
+
+    static void displayAllPatients() {
+
+        System.out.println("\n--- All Patient Records ---");
+
+        if (patients.isEmpty()) {
+            System.out.println("No patient records found.");
+            return;
+        }
+
+        for (Patient patient : patients) {
+            System.out.println(patient);
+        }
+
+        System.out.println("\nTotal Patients: " + patients.size());
+    }
+
+    // ================= SORT BY SEVERITY =================
+
+    static void sortBySeverity() {
+
+        System.out.println("\n--- Patients Sorted by Severity ---");
+
+        if (patients.isEmpty()) {
+            System.out.println("No patient records found.");
+            return;
+        }
+
+        ArrayList<Patient> sortedList = new ArrayList<>(patients);
+
+        sortedList.sort(
+            Comparator.comparingInt((Patient p) -> p.severity)
+                      .reversed()
+                      .thenComparingLong(p -> p.arrivalOrder)
+        );
+
+        for (Patient patient : sortedList) {
+            System.out.println(patient);
+        }
+    }
+
+    // ================= SORT BY APPOINTMENT =================
+
+    static void sortByAppointment() {
+
+        System.out.println("\n--- Patients Sorted by Appointment ---");
+
+        if (patients.isEmpty()) {
+            System.out.println("No patient records found.");
+            return;
+        }
+
+        ArrayList<Patient> sortedList = new ArrayList<>(patients);
+
+        sortedList.sort(
+            Comparator.comparing(
+                p -> LocalDateTime.parse(
+                    p.appointment,
+                    APPOINTMENT_FORMAT
+                )
+            )
+        );
+
+        for (Patient patient : sortedList) {
+            System.out.println(patient);
+        }
+    }
+
+    // ================= DELETE PATIENT =================
+
+    static void deletePatient() {
+
+        System.out.println("\n--- Delete Patient ---");
+
+        String id = readString("Enter Patient ID: ").toUpperCase();
+
+        Patient patient = patientMap.get(id);
+
+        if (patient == null) {
+            System.out.println("Patient not found.");
+            return;
+        }
+
+        patients.remove(patient);
+        patientMap.remove(id);
+
+        rebuildWaitingQueue();
+
+        System.out.println("Patient deleted successfully!");
+
+        savePatients();
+    }
+
+    // ================= DISPLAY WAITING QUEUE =================
+
+    static void displayWaitingQueue() {
+
+        System.out.println("\n--- Waiting Queue ---");
+
+        if (waitingQueue.isEmpty()) {
+            System.out.println("Waiting queue is empty.");
+            return;
+        }
+
+        // Copy queue to avoid modifying the actual queue
+        PriorityQueue<Patient> tempQueue =
+            new PriorityQueue<>(waitingQueue);
+
+        int position = 1;
+
+        while (!tempQueue.isEmpty()) {
+            Patient patient = tempQueue.poll();
+
+            System.out.println(
+                position + ". " +
+                patient.id + " | " +
+                patient.name + " | Severity: " +
+                patient.severity
+            );
+
+            position++;
+        }
+    }
+
+    // ================= REBUILD QUEUE =================
+
+    static void rebuildWaitingQueue() {
+
+        waitingQueue.clear();
+
+        for (Patient patient : patients) {
+            if (patient.status.equals("WAITING")) {
+                waitingQueue.add(patient);
+            }
+        }
+    }
+
+    // ================= INPUT VALIDATION =================
+
+    static int readInt(String message) {
+
+        while (true) {
+            System.out.print(message);
+
+            try {
+                int value = Integer.parseInt(sc.nextLine().trim());
+                return value;
+            } catch (NumberFormatException e) {
+                System.out.println("Please enter a valid number.");
+            }
+        }
+    }
+
+    static String readString(String message) {
+
+        while (true) {
+            System.out.print(message);
+
+            String input = sc.nextLine().trim();
+
+            if (!input.isEmpty()) {
+                return input;
+            }
+
+            System.out.println("Input cannot be empty!");
+        }
+    }
+
+    static int readSeverity() {
+
+        while (true) {
+            int severity = readInt("Enter Severity (1-5): ");
+
+            if (severity >= 1 && severity <= 5) {
+                return severity;
+            }
+
+            System.out.println("Severity must be between 1 and 5.");
+        }
+    }
+
+    static String readAppointment() {
+
+        while (true) {
+
+            System.out.print(
+                "Enter Appointment (yyyy-MM-dd HH:mm): "
+            );
+
+            String input = sc.nextLine().trim();
+
+            try {
+                LocalDateTime.parse(input, APPOINTMENT_FORMAT);
+                return input;
+            } catch (DateTimeParseException e) {
+                System.out.println(
+                    "Invalid date/time! Example: 2026-11-25 14:30"
+                );
+            }
+        }
+    }
+
+    // ================= FILE HANDLING =================
+
+    static void savePatients() {
+
+        try (PrintWriter writer =
+                 new PrintWriter(new FileWriter(FILE_NAME))) {
+
+            for (Patient patient : patients) {
+
+                writer.println(
+                    patient.id + "|" +
+                    patient.name.replace("|", "/") + "|" +
+                    patient.severity + "|" +
+                    patient.appointment + "|" +
+                    patient.arrivalOrder + "|" +
+                    patient.status
+                );
+            }
+
+        } catch (IOException e) {
+            System.out.println("Error saving data: " + e.getMessage());
+        }
+    }
+
+    static void loadPatients() {
+
+        File file = new File(FILE_NAME);
+
+        if (!file.exists()) {
+            System.out.println("No previous data found.");
+            return;
+        }
+
+        try (BufferedReader reader =
+                 new BufferedReader(new FileReader(file))) {
+
+            String line;
+
+            while ((line = reader.readLine()) != null) {
+
+                String[] data = line.split("\\|");
+
+                if (data.length != 6) {
+                    continue;
+                }
+
+                String id = data[0];
+                String name = data[1];
+                int severity = Integer.parseInt(data[2]);
+                String appointment = data[3];
+                long order = Long.parseLong(data[4]);
+                String status = data[5];
+
+                Patient patient = new Patient(
+                    id,
+                    name,
+                    severity,
+                    appointment,
+                    order,
+                    status
+                );
+
+                patients.add(patient);
+                patientMap.put(id, patient);
+
+                if (status.equals("WAITING")) {
+                    waitingQueue.add(patient);
+                }
+
+                if (order >= arrivalCounter) {
+                    arrivalCounter = order + 1;
+                }
+            }
+
+            System.out.println(
+                patients.size() + " patient records loaded successfully."
+            );
+
+        } catch (IOException | NumberFormatException e) {
+            System.out.println("Error loading patient data: " + e.getMessage());
+        }
+    }
+}
